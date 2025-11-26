@@ -1,0 +1,35 @@
+config:
+  target: "http://localhost:8080"
+  phases:
+    - duration: 60
+      arrivalRate: 2
+      name: "Warm up (100 users)"
+    - duration: 300
+      arrivalRate: 2
+      rampTo: 40
+      name: "Ramp up to 2000 users (approx 40/sec * 60s window)"
+    - duration: 600
+      arrivalRate: 40
+      name: "Sustained load (2000 users)"
+  plugins:
+    ensure: {}
+  ensure:
+    p95: 2000
+    maxErrorRate: 1
+
+scenarios:
+  - name: "Student Journey"
+    flow:
+      - get:
+          url: "/"
+      - think: 2
+      - get:
+          url: "/student/login"
+      - think: 5
+      - post:
+          url: "/api/student/login" # Mock endpoint for load testing if real auth is complex
+          json:
+            student_code: "STU{{ $randomString() }}"
+      - think: 3
+      - get:
+          url: "/grades"

@@ -1,0 +1,40 @@
+config:
+  target: "http://localhost:8080"
+  phases:
+    - duration: 60
+      arrivalRate: 5
+      name: "Warm up (300 users)"
+    - duration: 600
+      arrivalRate: 5
+      rampTo: 100
+      name: "Ramp up to 5000 users (approx 100/sec * 60s window)"
+    - duration: 300
+      arrivalRate: 100
+      name: "Peak load (5000+ users)"
+  plugins:
+    ensure: {}
+  ensure:
+    p99: 5000
+    maxErrorRate: 5
+
+scenarios:
+  - name: "Student Traffic"
+    weight: 80
+    flow:
+      - get:
+          url: "/"
+      - think: 1
+      - get:
+          url: "/student/login"
+      - think: 3
+      - get:
+          url: "/grades"
+  
+  - name: "Admin Traffic"
+    weight: 20
+    flow:
+      - get:
+          url: "/admin/login"
+      - think: 5
+      - get:
+          url: "/admin/dashboard"

@@ -24,7 +24,7 @@ interface ExcelRow {
 const BulkUploadTab = () => {
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
-  const [preview, setPreview] = useState<{ student_code: string; student_name: string; national_id?: string; grade?: number; isValid: boolean; error?: string }[]>([]);
+  const [preview, setPreview] = useState<{ student_code: string; student_name: string; national_id?: string; grade?: number; status?: string; isValid: boolean; error?: string }[]>([]);
   const [selectedCourseId, setSelectedCourseId] = useState<string>('');
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
@@ -74,7 +74,7 @@ const BulkUploadTab = () => {
         const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
         const dataRows = jsonData.slice(1) as (string | number)[][];
         
-        const previewData: { student_code: string; student_name: string; national_id?: string; grade?: number; isValid: boolean; error?: string }[] = [];
+        const previewData: { student_code: string; student_name: string; national_id?: string; grade?: number; status?: string; isValid: boolean; error?: string }[] = [];
         const seenRecords = new Set<string>();
         const seenNationalIds = new Set<string>();
         
@@ -86,6 +86,7 @@ const BulkUploadTab = () => {
           let error = '';
           let nationalId: string | undefined = undefined;
           let grade: number | undefined = undefined;
+          let status: string = '_';
 
           // Validation checks
           if (!row[0] || !row[1]) {
@@ -100,10 +101,11 @@ const BulkUploadTab = () => {
             seenRecords.add(studentCode);
 
             // Check columns for National ID and Grade
-            // Format MUST be: Code, Name, National ID, Grade (4 columns)
+            // Format MUST be: Code, Name, National ID, Grade, Status (optional)
             
             const val2 = row[2];
             const val3 = row[3];
+            const val4 = row[4];
 
             // Check National ID (Column 3)
             if (val2 === undefined || val2 === null || String(val2).trim() === '') {
@@ -143,6 +145,22 @@ const BulkUploadTab = () => {
                 else error = 'درجة غير صحيحة';
               }
             }
+
+            // Check Status (Column 5) 
+            if (val4 === undefined || val4 === null || String(val4).trim() === '') {
+              isValid = false;
+              if (error) error += ' و الحالة مفقودة';
+              else error = 'الحالة مفقودة';
+            } else {
+              const s = String(val4).trim().toLowerCase();
+              status = s;
+              const validStatuses = ['active', 'absent', 'hide'];
+              if (!validStatuses.includes(s)) {
+                isValid = false;
+                if (error) error += ' و حالة غير صحيحة';
+                else error = 'حالة غير صحيحة (يجب أن تكون: active, absent, hide)';
+              }
+            }
           }
           
           previewData.push({
@@ -150,6 +168,7 @@ const BulkUploadTab = () => {
             student_name: String(row[1] || '').trim(),
             national_id: nationalId,
             grade: grade,
+            status: status,
             isValid: isValid,
             error: error
           });
@@ -214,8 +233,8 @@ const BulkUploadTab = () => {
       const dataRows = jsonData.slice(1) as (string | number)[][];
       console.log('Data rows:', dataRows);
 
-      // Expected columns: 0: student_code, 1: student_name, 2: national_id (optional/mandatory), 3: grade
-      const processedData: { student_code: string; student_name: string; national_id?: string; grade: number }[] = [];
+      // Expected columns: 0: student_code, 1: student_name, 2: national_id (optional/mandatory), 3: grade, 4: status (optional)
+      const processedData: { student_code: string; student_name: string; national_id?: string; grade: number; status: string }[] = [];
       const invalidRows: string[] = [];
       const seenRecords = new Set<string>();
       const seenNationalIds = new Set<string>();
@@ -234,9 +253,11 @@ const BulkUploadTab = () => {
 
         let nationalId: string | undefined = undefined;
         let gradeNumber: number | undefined = undefined;
+        let status: string = 'active';
 
         const val2 = row[2];
         const val3 = row[3];
+        const val4 = row[4];
 
         // Validate National ID
         if (val2 === undefined || val2 === null || String(val2).trim() === '') {
@@ -263,6 +284,21 @@ const BulkUploadTab = () => {
            continue;
         }
         gradeNumber = g;
+
+        // Validate Status
+        if (val4 === undefined || val4 === null || String(val4).trim() === '') {
+           invalidRows.push(`الصف ${rowNumber}: الحالة مفقودة`);
+           continue;
+        } else {
+          const s = String(val4).trim().toLowerCase();
+          const validStatuses = ['active', 'absent', 'hide'];
+          if (validStatuses.includes(s)) {
+            status = s;
+          } else {
+            invalidRows.push(`الصف ${rowNumber}: حالة غير صحيحة (يجب أن تكون: active, absent, hide)`);
+            continue;
+          }
+        }
         
         const studentCode = String(row[0]).trim();
         
@@ -278,7 +314,8 @@ const BulkUploadTab = () => {
           student_code: studentCode,
           student_name: String(row[1]).trim(),
           national_id: nationalId,
-          grade: gradeNumber
+          grade: gradeNumber,
+          status: status
         });
       }
 
@@ -297,33 +334,26 @@ const BulkUploadTab = () => {
         throw new Error("لا توجد بيانات صحيحة في الملف");
       }
 
-      // Get existing students and courses
-      const { data: existingStudents } = await supabase.from('students').select('student_code');
-      const { data: existingCourses } = await supabase.from('courses').select('course_name');
+      // Upsert students (insert new or update existing)
+      const studentsToUpsert = processedData.map(row => ({ 
+        student_code: row.student_code, 
+        student_name: row.student_name,
+        national_id: row.national_id,
+        status: row.status
+      }));
 
-      const studentCodes = new Set(existingStudents?.map(s => s.student_code) || []);
-      const courseNames = new Set(existingCourses?.map(c => c.course_name) || []);
+      console.log('Students to upsert:', studentsToUpsert);
 
-      // Insert new students (ignore duplicates by checking existing)
-      // Note: If student exists but has no National ID, we might want to update it?
-      // For now, we only insert new students. Updating existing students via bulk upload is complex.
-      const newStudents = processedData
-        .filter(row => !studentCodes.has(row.student_code))
-        .map(row => ({ 
-          student_code: row.student_code, 
-          student_name: row.student_name,
-          national_id: row.national_id
-        }));
-
-      console.log('New students to insert:', newStudents);
-
-      if (newStudents.length > 0) {
-        const { error: studentError } = await supabase.from('students').insert(newStudents);
+      if (studentsToUpsert.length > 0) {
+        const { error: studentError } = await supabase
+          .from('students')
+          .upsert(studentsToUpsert, { onConflict: 'student_code' });
+          
         if (studentError) {
-          console.error('Student insert error:', studentError);
+          console.error('Student upsert error:', studentError);
           throw studentError;
         }
-        console.log('Students inserted successfully');
+        console.log('Students upserted successfully');
       }
 
       // Insert new courses (ignore duplicates by checking existing)
@@ -363,20 +393,20 @@ const BulkUploadTab = () => {
 
       console.log('Summary:');
       console.log('- Processed rows:', processedData.length);
-      console.log('- New students inserted:', newStudents.length);
+      console.log('- Students upserted:', studentsToUpsert.length);
       console.log('- Grades inserted/updated:', gradeInserts.length);
 
       // Log action
-      await logAdminAction(session.adminCode, "bulk_upload", "insert", {
+      await logAdminAction(session.adminCode, "bulk_upload", "upsert", {
         course_id: selectedCourse.id,
         total_rows: processedData.length,
-        new_students: newStudents.length,
+        students_processed: studentsToUpsert.length,
         grades_inserted: gradeInserts.length
       });
 
       toast({
         title: "نجح الرفع",
-        description: `تم رفع ${processedData.length} سجل (${newStudents.length} طالب جديد, ${gradeInserts.length} درجة) للمادة: ${selectedCourse.course_name}`,
+        description: `تم معالجة ${processedData.length} سجل (تحديث/إضافة ${studentsToUpsert.length} طالب, ${gradeInserts.length} درجة) للمادة: ${selectedCourse.course_name}`,
       });
 
       // Invalidate queries to refresh data in other tabs
@@ -613,8 +643,9 @@ const BulkUploadTab = () => {
                 <div className="sticky top-0 bg-gray-100 grid grid-cols-12 gap-2 px-4 py-3 text-xs font-bold text-gray-700 border-b border-gray-200">
                   <div className="col-span-2">رقم الطالب</div>
                   <div className="col-span-3">اسم الطالب</div>
-                  <div className="col-span-3">الرقم القومي</div>
-                  <div className="col-span-2">الدرجة</div>
+                  <div className="col-span-2">الرقم القومي</div>
+                  <div className="col-span-1">الدرجة</div>
+                  <div className="col-span-2">الحالة</div>
                   <div className="col-span-2">الخطأ</div>
                 </div>
 
@@ -630,8 +661,9 @@ const BulkUploadTab = () => {
                   >
                     <div className="col-span-2 font-mono text-gray-700 truncate">{row.student_code || '—'}</div>
                     <div className="col-span-3 text-gray-700 truncate">{row.student_name || '—'}</div>
-                    <div className="col-span-3 font-mono text-gray-700 truncate">{row.national_id || '—'}</div>
-                    <div className="col-span-2 font-semibold text-gray-700">{row.grade ?? '—'}</div>
+                    <div className="col-span-2 font-mono text-gray-700 truncate">{row.national_id || '—'}</div>
+                    <div className="col-span-1 font-semibold text-gray-700">{row.grade ?? '—'}</div>
+                    <div className="col-span-2 text-gray-700 truncate">{row.status}</div>
                     <div className="col-span-2 flex items-center gap-1">
                       {row.isValid ? (
                         <span className="flex items-center gap-1 text-green-700 text-xs font-semibold">
@@ -657,7 +689,8 @@ const BulkUploadTab = () => {
               العمود الأول: الكود الاكاديمي<br />
               العمود الثاني: اسم الطالب<br />
               العمود الثالث: الرقم القومي (<span className="font-semibold text-foreground">مطلوب</span>)<br />
-              العمود الرابع: الدرجة (رقم، <span className="font-semibold text-foreground">مطلوب</span>)
+              العمود الرابع: الدرجة (رقم، <span className="font-semibold text-foreground">مطلوب</span>)<br />
+              العمود الخامس: الحالة (<span className="font-semibold text-foreground">مطلوب</span>) - القيم المسموحة: active, absent, hide
             </p>
             <p className="text-xs text-muted-foreground mt-2">
               * الصف الأول هو العناوين (سيتم تجاهله)<br />

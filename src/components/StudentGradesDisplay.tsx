@@ -21,6 +21,7 @@ interface GradeItem {
 export const StudentGradesDisplay = () => {
   const [studentName, setStudentName] = useState("");
   const [studentCode, setStudentCode] = useState("");
+  const [studentStatus, setStudentStatus] = useState<string>("");
   const [grades, setGrades] = useState<CourseGrade[]>([]);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
@@ -28,6 +29,17 @@ export const StudentGradesDisplay = () => {
 
   const fetchGrades = useCallback(async (studentId: string) => {
     try {
+      // Fetch student status first
+      const { data: studentData, error: studentError } = await supabase
+        .from("students")
+        .select("status")
+        .eq("id", studentId)
+        .maybeSingle();
+
+      if (studentData) {
+        setStudentStatus((studentData as unknown as { status: string }).status);
+      }
+
       const { data, error } = await supabase
         .from("grades")
         .select(`
@@ -95,15 +107,20 @@ export const StudentGradesDisplay = () => {
             height={128}
             className="w-32 h-32 object-contain rounded-full shadow-[var(--shadow-glow)]"
           />
-          <h1 className="text-4xl font-bold text-foreground text-center">
+          <h1 className="text-2xl font-bold text-foreground text-center">
+          المعهد العالى للعلوم الادارية المتقدمه والحاسبات
+          </h1>
+          <div className="flex flex-col justify-start items-center flex-nowrap gap-4">
+            <h1 className="text-2xl font-bold text-foreground text-center">
             درجات الطالب - الطالبة
           </h1>
-          <div className="text-center space-y-2">
-            <p className="text-xl text-foreground font-semibold">
+            <div className="flex flex-row text-center  items-center gap-6">
+            <p className="text-l text-muted-foreground font-semibold">
               {studentName}
             </p>
-            <p className="text-lg text-muted-foreground">  الكود الأكاديمي : {studentCode}
+            <p className="text-lg font-semibold text-muted-foreground">  الكود الأكاديمي : {studentCode}
             </p>
+            </div>
           </div>
           <Button
             variant="outline"
@@ -130,6 +147,18 @@ export const StudentGradesDisplay = () => {
                   <Skeleton className="h-6 w-16" />
                 </div>
               ))}
+            </div>
+          </Card>
+        ) : studentStatus !== 'active' ? (
+          <Card className="w-full bg-card/95 backdrop-blur-sm border-border shadow-[var(--shadow-glow)] p-8">
+            <div className="flex flex-col items-center gap-4 text-center">
+              <div className="p-4 rounded-full bg-destructive/10 text-destructive">
+                <LogOut className="w-8 h-8 rotate-180" />
+              </div>
+              <div className="space-y-2">
+                <h3 className="text-xl font-bold text-destructive">عذراً، النتيجة محجوبة</h3>
+                <p className="text-lg text-foreground">يرجى مراجعة شؤون الطلاب</p>
+              </div>
             </div>
           </Card>
         ) : grades.length === 0 ? (

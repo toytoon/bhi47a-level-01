@@ -218,8 +218,8 @@ export const CoursesTab = () => {
   };
 
   const handleCourseNameChange = (value: string, isEditing: boolean) => {
-    // Allow only letters (Arabic/English) and spaces, max 40 chars
-    const sanitizedValue = value.replace(/[^a-zA-Z\u0600-\u06FF\s]/g, '').slice(0, 40);
+    // Allow only letters (Arabic/English), spaces, and parentheses, max 50 chars
+    const sanitizedValue = value.replace(/[^a-zA-Z\u0600-\u06FF\s()]/g, '').slice(0, 50);
     
     if (isEditing && editingCourse) {
       setEditingCourse({ ...editingCourse, course_name: sanitizedValue });
@@ -260,7 +260,7 @@ export const CoursesTab = () => {
                 <Input
                   placeholder="اسم المادة"
                   minLength={4}
-                  maxLength={40}
+                  maxLength={50}
                   value={editingCourse ? editingCourse.course_name : newCourseName}
                   onChange={(e) => handleCourseNameChange(e.target.value, !!editingCourse)}
                   className="text-right bg-secondary/50 border-border"

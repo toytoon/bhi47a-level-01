@@ -102,6 +102,7 @@ export type Database = {
           student_code: string
           student_name: string
           national_id: string | null
+          status: string
         }
         Insert: {
           created_at?: string | null
@@ -109,6 +110,7 @@ export type Database = {
           student_code: string
           student_name: string
           national_id?: string | null
+          status?: string
         }
         Update: {
           created_at?: string | null
@@ -116,6 +118,7 @@ export type Database = {
           student_code?: string
           student_name?: string
           national_id?: string | null
+          status?: string
         }
         Relationships: []
       }

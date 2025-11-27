@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -17,11 +18,12 @@ interface Student {
   student_code: string;
   student_name: string;
   national_id: string | null;
+  status: string;
 }
 
 export const StudentsTab = () => {
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
-  const [newStudent, setNewStudent] = useState({ code: "", name: "", nationalId: "" });
+  const [newStudent, setNewStudent] = useState({ code: "", name: "", nationalId: "", status: "active" });
   const [dialogOpen, setDialogOpen] = useState(false);
   const [searchCode, setSearchCode] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -44,7 +46,7 @@ export const StudentsTab = () => {
 
       const { data, error, count } = await query;
       if (error) throw error;
-      return { students: data, count };
+      return { students: data as unknown as Student[], count };
     },
     placeholderData: keepPreviousData,
   });
@@ -105,7 +107,8 @@ export const StudentsTab = () => {
         .insert([{
           student_code: sanitizedCode,
           student_name: sanitizedName,
-          national_id: sanitizedNationalId
+          national_id: sanitizedNationalId,
+          status: newStudent.status
         }]);
 
       if (error) throw error;
@@ -114,11 +117,12 @@ export const StudentsTab = () => {
       await logAdminAction(session.adminCode, "students", "insert", {
         student_code: sanitizedCode,
         student_name: sanitizedName,
-        national_id: sanitizedNationalId
+        national_id: sanitizedNationalId,
+        status: newStudent.status
       });
 
       toast({ title: "نجح", description: "تم إضافة الطالب بنجاح" });
-      setNewStudent({ code: "", name: "", nationalId: "" });
+      setNewStudent({ code: "", name: "", nationalId: "", status: "active" });
       setDialogOpen(false);
       queryClient.invalidateQueries({ queryKey: ["students"] });
     } catch (error) {
@@ -180,7 +184,8 @@ export const StudentsTab = () => {
         .update({
           student_code: editingStudent.student_code,
           student_name: editingStudent.student_name,
-          national_id: editingStudent.national_id
+          national_id: editingStudent.national_id,
+          status: editingStudent.status
         })
         .eq("id", editingStudent.id);
 
@@ -191,7 +196,8 @@ export const StudentsTab = () => {
         id: editingStudent.id,
         student_code: editingStudent.student_code,
         student_name: editingStudent.student_name,
-        national_id: editingStudent.national_id
+        national_id: editingStudent.national_id,
+        status: editingStudent.status
       });
 
       toast({ title: "نجح", description: "تم تحديث الطالب بنجاح" });
@@ -291,7 +297,7 @@ export const StudentsTab = () => {
             <Button
               onClick={() => {
                 setEditingStudent(null);
-                setNewStudent({ code: "", name: "", nationalId: "" });
+                setNewStudent({ code: "", name: "", nationalId: "", status: "active" });
               }}
               className="gap-2 bg-primary hover:bg-primary/90"
             >
@@ -367,6 +373,27 @@ export const StudentsTab = () => {
                   pattern="[0-9]*"
                 />
               </div>
+              <div>
+                <Select
+                  value={editingStudent ? editingStudent.status : newStudent.status}
+                  onValueChange={(val) => {
+                    if (editingStudent) {
+                      setEditingStudent({ ...editingStudent, status: val });
+                    } else {
+                      setNewStudent({ ...newStudent, status: val });
+                    }
+                  }}
+                >
+                  <SelectTrigger className="text-right bg-secondary/50 border-border" dir="rtl">
+                    <SelectValue placeholder="حالة الطالب" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="active">نشط</SelectItem>
+                    <SelectItem value="absent">غائب</SelectItem>
+                    <SelectItem value="hide">محجوب</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
               <Button
                 onClick={editingStudent ? handleUpdateStudent : handleAddStudent}
                 className="w-full bg-primary hover:bg-primary/90"
@@ -404,6 +431,7 @@ export const StudentsTab = () => {
               <TableHead className="text-right text-foreground"> الكود الاكاديمي</TableHead>
               <TableHead className="text-right text-foreground">اسم الطالب</TableHead>
               <TableHead className="text-right text-foreground">الرقم القومي</TableHead>
+              <TableHead className="text-right text-foreground">الحالة</TableHead>
               <TableHead className="text-right text-foreground">الإجراءات</TableHead>
             </TableRow>
           </TableHeader>
@@ -414,6 +442,23 @@ export const StudentsTab = () => {
                   <TableCell className="text-foreground font-mono">{student.student_code}</TableCell>
                   <TableCell className="text-foreground">{student.student_name}</TableCell>
                   <TableCell className="text-foreground font-mono">{student.national_id || "-"}</TableCell>
+                  <TableCell>
+                    {student.status === 'active' ? (
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-500/20 text-green-400">
+                        نشط
+                      </span>
+                    ) : (student.status === 'absent' || student.status === 'غائب') ? (
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-destructive/20 text-destructive">
+                        غائب
+                      </span>
+                    ) : (student.status === 'hide' || student.status === 'محجوب') ? (
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-500/20 text-yellow-400">
+                        محجوب
+                      </span>
+                    ) : (
+                      <span className="text-foreground">{student.status}</span>
+                    )}
+                  </TableCell>
                   <TableCell>
                     <div className="flex gap-2">
                       <Button

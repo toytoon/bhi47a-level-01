@@ -22,9 +22,9 @@ export const Welcome = () => {
             loading="eager"
             className="w-36 h-36 object-contain rounded-full shadow-[var(--shadow-glow)]"
           />
-          <h1 className="text-4xl font-bold text-foreground text-center">
-            نظام إدارة درجات الطلاب
-          </h1>
+          <h2 className="text-2xl font-bold text-foreground text-center">
+          المعهد العالى للعلوم الادارية المتقدمه والحاسبات
+          </h2>
           <p className="text-muted-foreground text-center text-lg">
             مرحباً بك في نظام إدارة الدرجات
           </p>
